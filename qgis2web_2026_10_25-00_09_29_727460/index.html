@@ -552,31 +552,19 @@
             var popupContent = '<table>\
                     <tr>\
                         <th scope="row">Photo ID</th>\
-                        <td class="visible-with-data" id="照片總編號
-Photo ID">' + (feature.properties['照片總編號
-Photo ID'] !== null ? autolinker.link(String(feature.properties['照片總編號
-Photo ID']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="照片總編號\nPhoto ID">' + (feature.properties['照片總編號\nPhoto ID'] !== null ? autolinker.link(String(feature.properties['照片總編號\nPhoto ID']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Date</th>\
-                        <td class="visible-with-data" id="指攝日期
-Photograph Date">' + (feature.properties['指攝日期
-Photograph Date'] !== null ? autolinker.link(String(feature.properties['指攝日期
-Photograph Date']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="指攝日期\nPhotograph Date">' + (feature.properties['指攝日期\nPhotograph Date'] !== null ? autolinker.link(String(feature.properties['指攝日期\nPhotograph Date']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Location</th>\
-                        <td class="visible-with-data" id="位置
-Place">' + (feature.properties['位置
-Place'] !== null ? autolinker.link(String(feature.properties['位置
-Place']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="位置\nPlace">' + (feature.properties['位置\nPlace'] !== null ? autolinker.link(String(feature.properties['位置\nPlace']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Photograph</th>\
-                        <td class="visible-with-data" id="相片
-Photo_path">' + (feature.properties['相片
-Photo_path'] !== null ? '<img src="images/' + String(feature.properties['相片
-Photo_path']).replace(/[\\/:]/g, '_').trim().replace(/'/g, '\'').replace(/"/g, '&quot;') + '">' : '') + '</td>\
+                        <td class="visible-with-data" id="相片\nPhoto_path">' + (feature.properties['相片\nPhoto_path'] !== null ? '<img src="images/' + String(feature.properties['相片\nPhoto_path']).replace(/[\\/:]/g, '_').trim().replace(/'/g, '\'').replace(/"/g, '&quot;').replace(/ /g, '%20') + '">' : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Primary subject</th>\
@@ -592,10 +580,7 @@ Photo_path']).replace(/[\\/:]/g, '_').trim().replace(/'/g, '\'').replace(/"/g, '
                     </tr>\
                     <tr>\
                         <th scope="row">File Type</th>\
-                        <td class="visible-with-data" id="檔案類型
-File type">' + (feature.properties['檔案類型
-File type'] !== null ? autolinker.link(String(feature.properties['檔案類型
-File type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="檔案類型\nFile type">' + (feature.properties['檔案類型\nFile type'] !== null ? autolinker.link(String(feature.properties['檔案類型\nFile type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Source</th>\
@@ -603,17 +588,11 @@ File type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Location precision</th>\
-                        <td class="visible-with-data" id="坐標可信度
-coordinate_confidence">' + (feature.properties['坐標可信度
-coordinate_confidence'] !== null ? autolinker.link(String(feature.properties['坐標可信度
-coordinate_confidence']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="坐標可信度\ncoordinate_confidence">' + (feature.properties['坐標可信度\ncoordinate_confidence'] !== null ? autolinker.link(String(feature.properties['坐標可信度\ncoordinate_confidence']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                     <tr>\
                         <th scope="row">Note</th>\
-                        <td class="visible-with-data" id="坐標備註
-coordinate_note">' + (feature.properties['坐標備註
-coordinate_note'] !== null ? autolinker.link(String(feature.properties['坐標備註
-coordinate_note']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                        <td class="visible-with-data" id="坐標備註\ncoordinate_note">' + (feature.properties['坐標備註\ncoordinate_note'] !== null ? autolinker.link(String(feature.properties['坐標備註\ncoordinate_note']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                     </tr>\
                 </table>';
             var content = removeEmptyRowsFromPopupContent(popupContent, feature);
@@ -770,9 +749,7 @@ coordinate_note']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
                 feature: layer.feature,
                 variables: {}
             };
-            layer.bindTooltip((layer.feature.properties['q2wHide_照片流水號
-Photo serial number'] !== null?String('<div style="color: #323232; font-size: 10pt; font-family: \'Open Sans\', sans-serif;">' + layer.feature.properties['q2wHide_照片流水號
-Photo serial number']).replace(/\\n/g, '<br>') + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_B21_7'});
+            layer.bindTooltip((layer.feature.properties['q2wHide_照片流水號\nPhoto serial number'] !== null?String('<div style="color: #323232; font-size: 10pt; font-family: \'Open Sans\', sans-serif;">' + layer.feature.properties['q2wHide_照片流水號\nPhoto serial number']).replace(/\\n/g, '<br>') + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_B21_7'});
             labels.push(layer);
             totalMarkers += 1;
               layer.added = true;
