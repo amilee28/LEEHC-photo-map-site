@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <title>Tung Chung Photo Map — Custom Viewer</title>
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/MarkerCluster.css">
+        <link rel="stylesheet" href="css/MarkerCluster.Default.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <style>
+            :root {
+                --bg: #ffffff;
+                --panel-bg: #f6f7f9;
+                --border: #d9dde3;
+                --accent: #2f6fb0;
+                --accent-dark: #1d4e80;
+                --text: #1f2733;
+                --muted: #6b7686;
+                --chip: #e8eef6;
+                --warn-bg: #fff8e1;
+                --warn-border: #f0c36d;
+            }
+            * { box-sizing: border-box; }
+            html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif; color: var(--text); }
+            a { color: var(--accent); }
+
+            #app {
+                display: grid;
+                grid-template-columns: 280px 1fr 420px;
+                grid-template-areas: "filters map meta";
+                height: 100vh;
+                width: 100vw;
+            }
+
+            /* ---------- LEFT: Filters ---------- */
+            #filters {
+                grid-area: filters;
+                background: var(--panel-bg);
+                border-right: 1px solid var(--border);
+                overflow-y: auto;
+                padding: 14px 14px 24px;
+                position: relative;
+                transition: width 0.25s ease, padding 0.25s ease;
+            }
+            #filters .filter-collapse-btn {
+                display: block; position: absolute; top: 8px; right: 10px;
+                border: none; background: transparent; font-size: 18px; line-height: 1;
+                cursor: pointer; color: var(--muted); z-index: 10;
+            }
+            #filters .filter-collapse-btn:hover { color: var(--accent-dark); }
+            #app.filter-collapsed { grid-template-columns: 36px 1fr 420px; }
+            #app.filter-collapsed #filters { padding: 0; overflow: hidden; }
+            #app.filter-collapsed #filters > *:not(.filter-expand-btn) { display: none; }
+            #filters .filter-expand-btn {
+                display: none; position: absolute; top: 0; left: 0; width: 36px; height: 100%;
+                align-items: center; justify-content: center; cursor: pointer;
+                background: var(--panel-bg); border-right: 1px solid var(--border);
+                font-size: 18px; color: var(--muted); writing-mode: vertical-rl;
+                text-orientation: mixed; letter-spacing: 2px; font-size: 11px;
+            }
+            #filters .filter-expand-btn:hover { background: var(--chip); color: var(--accent-dark); }
+            #app.filter-collapsed #filters .filter-expand-btn { display: flex; }
+
+            #filters h1 { font-size: 16px; margin: 0 0 4px; color: var(--accent-dark); }
+            #filters .subtitle { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+            #filters .intro {
+                font-size: 12.5px; line-height: 1.5; color: var(--text);
+                background: var(--chip); border-radius: 8px; padding: 10px 12px;
+                margin-bottom: 12px; border-left: 3px solid var(--accent);
+            }
+            .count-box { background: var(--accent); color: #fff; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; }
+            .count-box b { font-size: 16px; }
+            .count-box .subcount { font-size: 11px; opacity: 0.9; margin-top: 2px; }
+            .filter-actions { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+            .filter-actions button { flex: 1; padding: 8px 6px; font-size: 12px; border: 1px solid var(--border); background: #fff; border-radius: 6px; cursor: pointer; color: var(--text); min-width: 0; }
+            .filter-actions button:hover { background: var(--chip); }
+            .filter-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+            .filter-actions button.primary:hover { background: var(--accent-dark); }
+            .uncertain-msg {
+                font-size: 11.5px; color: var(--muted); margin: -4px 0 10px;
+                padding: 8px 10px; background: var(--warn-bg); border: 1px solid var(--warn-border);
+                border-radius: 6px; display: none;
+            }
+            .uncertain-msg.visible { display: block; }
+            .filter-group { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px; }
+            .filter-group > .fg-head { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+            .filter-group > .fg-head .arrow { color: var(--muted); transition: transform .15s; font-size: 10px; }
+            .filter-group.collapsed .arrow { transform: rotate(-90deg); }
+            .filter-group .fg-body { max-height: 280px; overflow-y: auto; }
+            .filter-group.collapsed .fg-body { display: none; }
+            .opt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 2px; cursor: pointer; }
+            .opt input { cursor: pointer; }
+            .opt .cnt { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+            .precision-note {
+                font-size: 11px; color: var(--muted); line-height: 1.45;
+                margin-top: 6px; padding: 8px 10px; background: #fff; border-radius: 6px;
+                border: 1px solid var(--border);
+            }
+            .precision-note strong { color: var(--text); font-size: 11.5px; }
+
+            /* Marker legend */
+            .marker-legend {
+                margin-top: 10px; padding: 10px; background: #fff; border-radius: 8px;
+                border: 1px solid var(--border); font-size: 12px;
+            }
+            .marker-legend-title { font-weight: 600; margin-bottom: 6px; font-size: 12.5px; }
+            .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+            .legend-swatch { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+
+            /* Unmapped photos section */
+            .unmapped-section { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 14px; }
+            .survey-legend {
+                margin-top: 14px; padding: 10px 12px; background: #fff; border-radius: 8px;
+                border: 1px solid var(--border); font-size: 12px;
+            }
+            .marker-legend-static {
+                margin-top: 14px; padding: 10px 12px; background: #fff; border-radius: 8px;
+                border: 1px solid var(--border); font-size: 12px;
+            }
+            .survey-legend-title, .marker-legend-static .marker-legend-title { font-weight: 600; margin-bottom: 6px; font-size: 12.5px; }
+            .unmapped-title { font-size: 13px; font-weight: 600; color: var(--accent-dark); margin-bottom: 6px; }
+            .unmapped-sub { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+            .unmapped-item {
+                display: flex; align-items: center; gap: 8px;
+                padding: 6px 8px; background: #fff; border: 1px solid var(--border);
+                border-radius: 6px; margin-bottom: 5px; cursor: pointer; font-size: 12px;
+            }
+            .unmapped-item:hover { background: var(--chip); }
+            .unmapped-item .badge {
+                background: #e74c3c; color: #fff; font-size: 10px; padding: 2px 6px;
+                border-radius: 4px; flex: none; font-weight: 600;
+            }
+            .unmapped-item .place { color: var(--muted); margin-left: auto; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+
+            /* ---------- CUSTOM LAYER CONTROL ---------- */
+            .layer-panel {
+                background: #fff; border-radius: 8px; border: 1px solid var(--border);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.12); min-width: 240px; max-width: 280px;
+                font-size: 12px; color: var(--text);
+            }
+            .layer-panel-header {
+                padding: 10px 12px; font-weight: 600; font-size: 13px;
+                border-bottom: 1px solid var(--border); background: var(--panel-bg);
+                border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between;
+            }
+            .layer-panel-body { max-height: 380px; overflow-y: auto; padding: 6px 0; }
+            .layer-item {
+                display: flex; align-items: center; gap: 6px;
+                padding: 7px 10px; cursor: move; user-select: none;
+                border-bottom: 1px solid #f0f0f0; transition: background 0.15s;
+            }
+            .layer-item:last-child { border-bottom: none; }
+            .layer-item:hover { background: #f8f9fb; }
+            .layer-item.dragging { opacity: 0.5; background: #eef2ff; }
+            .layer-item.drag-over { border-top: 2px solid var(--accent); }
+            .layer-drag-handle {
+                color: #bbb; font-size: 14px; cursor: grab; flex: none; width: 14px; text-align: center;
+            }
+            .layer-item.dragging .layer-drag-handle { cursor: grabbing; }
+            .layer-visibility { flex: none; }
+            .layer-visibility input { width: 14px; height: 14px; margin: 0; cursor: pointer; }
+            .layer-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+            .layer-opacity-wrap {
+                display: flex; align-items: center; gap: 4px; flex: none; width: 70px;
+            }
+            .layer-opacity-wrap input[type=range] {
+                -webkit-appearance: none; width: 100%; height: 4px; background: #ddd; border-radius: 2px; outline: none; cursor: pointer;
+            }
+            .layer-opacity-wrap input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer;
+            }
+            .layer-opacity-wrap input[type=range]::-moz-range-thumb {
+                width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer;
+            }
+            .layer-opacity-val { font-size: 10px; color: var(--muted); width: 22px; text-align: right; }
+            .layer-panel-footer {
+                padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel-bg);
+                border-radius: 0 0 8px 8px; font-size: 10.5px; color: var(--muted); text-align: center;
+            }
+
+            /* ---------- MIDDLE: Map ---------- */
+            #map { grid-area: map; height: 100%; width: 100%; background: #aadaff; }
+
+            /* ---------- RIGHT: Metadata ---------- */
+            #meta { grid-area: meta; background: var(--bg); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px 18px 28px; position: relative; }
+            #meta .placeholder { color: var(--muted); font-size: 13px; margin-top: 35%; text-align: center; padding: 0 20px; }
+            #meta .close-btn { display: none; }
+            #meta h2 { font-size: 15px; margin: 0 0 10px; color: var(--accent-dark); padding-right: 24px; }
+            #meta .photo-wrap { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #f0f0f0; margin-bottom: 12px; }
+            #meta .photo-wrap img { width: 100%; display: block; }
+            #meta .photo-wrap .imgfail { padding: 30px 10px; text-align: center; color: var(--muted); font-size: 12px; }
+            #meta dl { margin: 0; }
+            #meta .row { padding: 7px 0; border-bottom: 1px solid #eef0f3; }
+            #meta .row dt { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 2px; }
+            #meta .row dd { margin: 0; font-size: 13px; line-height: 1.45; word-break: break-word; }
+            #meta .row dd.null { color: #b3bac4; font-style: italic; }
+            #meta .no-coords-banner {
+                background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 6px;
+                padding: 8px 10px; font-size: 12px; color: var(--muted); margin-bottom: 10px;
+            }
+
+            #metaToggle { display: none; position: fixed; right: 14px; bottom: 14px; z-index: 1200; background: var(--accent); color: #fff; border: none; border-radius: 24px; padding: 12px 16px; font-size: 14px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+            /* Meta panel collapse (desktop) */
+            #meta { transition: width 0.25s ease, padding 0.25s ease; }
+            #meta .meta-collapse-btn {
+                display: block; position: absolute; top: 8px; right: 12px;
+                border: none; background: transparent; font-size: 18px; line-height: 1;
+                cursor: pointer; color: var(--muted); z-index: 10;
+            }
+            #meta .meta-collapse-btn:hover { color: var(--accent-dark); }
+            #app.meta-collapsed { grid-template-columns: 280px 1fr 36px; }
+            #app.meta-collapsed #meta { padding: 0; overflow: hidden; }
+            #app.meta-collapsed #metaContent,
+            #app.meta-collapsed .close-btn,
+            #app.meta-collapsed .meta-collapse-btn { display: none; }
+            #meta .meta-expand-btn {
+                display: none; position: absolute; top: 0; left: 0; width: 36px; height: 100%;
+                align-items: center; justify-content: center; cursor: pointer;
+                background: var(--panel-bg); border-left: 1px solid var(--border);
+                font-size: 18px; color: var(--muted);
+            }
+            #meta .meta-expand-btn:hover { background: var(--chip); color: var(--accent-dark); }
+            #app.meta-collapsed #meta .meta-expand-btn { display: flex; }
+
+            /* Layer panel collapse */
+            .layer-panel.collapsed { min-width: auto; width: auto; }
+            .layer-panel.collapsed .layer-panel-body,
+            .layer-panel.collapsed .layer-panel-footer { display: none; }
+            .layer-panel.collapsed .layer-panel-header { border-radius: 8px; border-bottom: none; cursor: pointer; }
+            .layer-panel-header .layer-collapse-btn {
+                border: none; background: transparent; font-size: 14px; cursor: pointer;
+                color: var(--muted); padding: 0 2px; margin-left: 6px;
+            }
+            .layer-panel-header .layer-collapse-btn:hover { color: var(--accent-dark); }
+
+            /* ---------- PHOTO GALLERY ---------- */
+            .gallery-main { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #f0f0f0; margin-bottom: 8px; cursor: zoom-in; position: relative; }
+            .gallery-main img { width: 100%; display: block; }
+            .gallery-counter { position: absolute; top: 6px; right: 8px; background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 12px; z-index: 2; }
+            .gallery-thumbs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 10px; }
+            .gallery-thumbs::-webkit-scrollbar { height: 4px; }
+            .gallery-thumbs::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+            .gallery-thumb { flex: none; width: 56px; height: 56px; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: #f0f0f0; opacity: 0.7; transition: opacity 0.15s, border-color 0.15s; }
+            .gallery-thumb:hover { opacity: 1; }
+            .gallery-thumb.active { border-color: var(--accent); opacity: 1; }
+            .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+            .gallery-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+            .gallery-nav button { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text); }
+            .gallery-nav button:hover { background: var(--chip); }
+            .gallery-nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+            .gallery-nav .g-info { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+            /* ---------- LIGHTBOX ---------- */
+            .lightbox-overlay {
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.92); z-index: 2000;
+                display: flex; align-items: center; justify-content: center;
+                opacity: 0; visibility: hidden; transition: opacity 0.2s;
+            }
+            .lightbox-overlay.open { opacity: 1; visibility: visible; }
+            .lightbox-img { max-width: 92vw; max-height: 88vh; object-fit: contain; border-radius: 4px; }
+            .lightbox-close {
+                position: absolute; top: 14px; right: 18px; background: transparent; border: none;
+                color: #fff; font-size: 32px; cursor: pointer; line-height: 1; z-index: 2001;
+            }
+            .lightbox-prev, .lightbox-next {
+                position: absolute; top: 50%; transform: translateY(-50%);
+                background: rgba(255,255,255,0.15); border: none; color: #fff;
+                font-size: 28px; width: 44px; height: 44px; border-radius: 50%;
+                cursor: pointer; display: flex; align-items: center; justify-content: center;
+            }
+            .lightbox-prev:hover, .lightbox-next:hover { background: rgba(255,255,255,0.3); }
+            .lightbox-prev { left: 14px; }
+            .lightbox-next { right: 14px; }
+            .lightbox-counter {
+                position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+                background: rgba(0,0,0,0.6); color: #fff; font-size: 13px;
+                padding: 5px 14px; border-radius: 16px;
+            }
+
+            /* ---------- MOBILE BOTTOM SHEET ---------- */
+            @media (max-width: 680px) {
+                #app { grid-template-columns: 1fr; grid-template-areas: "map"; grid-template-rows: 100vh; height: 100vh; min-height: auto; }
+                #map { height: 100vh; }
+                #filters {
+                    position: fixed; bottom: 0; left: 0; width: 100%; height: 60vh;
+                    z-index: 1100; background: #fff; border-radius: 16px 16px 0 0;
+                    border: none; box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+                    transform: translateY(calc(100% - 44px)); transition: transform 0.3s ease;
+                    padding: 0; display: flex; flex-direction: column;
+                }
+                #filters.sheet-open { transform: translateY(0); }
+                .sheet-handle {
+                    width: 100%; height: 44px; flex: none; display: flex;
+                    align-items: center; justify-content: center; cursor: pointer;
+                    border-bottom: 1px solid var(--border);
+                }
+                .sheet-handle-bar { width: 40px; height: 4px; background: #ccc; border-radius: 2px; }
+                .sheet-handle-text { font-size: 13px; font-weight: 600; color: var(--text); margin-left: 8px; }
+                .sheet-content { flex: 1; overflow-y: auto; padding: 10px 14px 20px; }
+                #filters h1, #filters .subtitle, #filters .intro,
+                #filters .count-box, #filters .filter-actions { display: none; }
+                .sheet-open #filters h1, .sheet-open #filters .subtitle,
+                .sheet-open #filters .intro, .sheet-open #filters .count-box,
+                .sheet-open #filters .filter-actions { display: block; }
+                .sheet-open #filters h1, .sheet-open #filters .subtitle,
+                .sheet-open #filters .intro, .sheet-open #filters .count-box,
+                .sheet-open #filters .filter-actions { display: block; }
+                #filterCollapse, #filterExpand { display: none !important; }
+                .sheet-close-btn {
+                    position: absolute; top: 8px; right: 12px; border: none;
+                    background: transparent; font-size: 22px; cursor: pointer; color: var(--muted);
+                }
+            }
+
+            /* ---------- Tablet ---------- */
+            @media (max-width: 1100px) {
+                #app { grid-template-columns: 260px 1fr; grid-template-areas: "filters map"; grid-template-rows: 100vh; }
+                #app.meta-collapsed { grid-template-columns: 260px 1fr; }
+                #app.filter-collapsed { grid-template-columns: 36px 1fr; }
+                #meta { position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 92vw); z-index: 1100; transform: translateX(100%); transition: transform .25s ease; box-shadow: -3px 0 12px rgba(0,0,0,.2); }
+                #meta.meta-open { transform: translateX(0); }
+                #meta .close-btn { display: inline-block; position: absolute; top: 8px; right: 12px; border: none; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); }
+                #meta .meta-collapse-btn, #meta .meta-expand-btn { display: none !important; }
+                #filters .filter-collapse-btn, #filters .filter-expand-btn { display: none !important; }
+                #metaToggle { display: block; }
+            }
+
+            /* ---------- Mobile ---------- */
+            @media (max-width: 680px) {
+                /* bottom sheet CSS already defined above */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <aside id="filters">
+                <!-- Mobile bottom sheet handle -->
+                <div class="sheet-handle" id="sheetHandle">
+                    <div class="sheet-handle-bar"></div>
+                    <span class="sheet-handle-text">Filters</span>
+                    <button class="sheet-close-btn" id="sheetClose" type="button">&times;</button>
+                </div>
+                <div class="sheet-content">
+                    <button class="filter-collapse-btn" id="filterCollapse" type="button" aria-label="Collapse panel">&#9654;</button>
+                    <h1>Tung Chung Photo Map</h1>
+                <p class="subtitle">B21 historical photographs — filter &amp; explore</p>
+                <p class="intro">Use the filters to compare what was photographed, where, and with what degree of spatial certainty.</p>
+                <div class="count-box" id="countBox">
+                    Showing <b id="shownCount">0</b> of <span id="totalCount">0</span> photos
+                    <div class="subcount" id="subCount">0 on map + 0 without coordinates</div>
+                </div>
+                <div class="filter-actions">
+                    <button id="btnSelectAll" type="button">Select all</button>
+                    <button id="btnClear" type="button">Clear</button>
+                    <button id="btnUncertain" class="primary" type="button">Show uncertain</button>
+                    <button id="btnReset" type="button">Reset</button>
+                </div>
+                <div class="uncertain-msg" id="uncertainMsg"></div>
+                <div id="filterGroups"></div>
+                <div class="marker-legend-static" id="markerLegend"></div>
+                <div class="survey-legend" id="surveyLegend"></div>
+                <div class="unmapped-section" id="unmappedSection" style="display:none;">
+                    <div class="unmapped-title">Photos without precise coordinates</div>
+                    <div class="unmapped-sub">Click to view metadata (these records cannot be placed on the map)</div>
+                    <div id="unmappedList"></div>
+                </div>
+                </div>
+                <div class="filter-expand-btn" id="filterExpand" title="Expand filters">Filters</div>
+            </aside>
+
+            <div id="map"></div>
+
+            <aside id="meta">
+                <button class="close-btn" id="metaClose" type="button" aria-label="Close">&times;</button>
+                <button class="meta-collapse-btn" id="metaCollapse" type="button" aria-label="Collapse panel">&#9664;</button>
+                <div class="meta-expand-btn" id="metaExpand" title="Expand info panel">&#9432;</div>
+                <div id="metaContent">
+                    <p class="placeholder">Click a photo marker on the map to view the photograph and its metadata.</p>
+                </div>
+                <div class="filter-expand-btn" id="filterExpand" title="Expand filters">Filters</div>
+            </aside>
+        </div>
+
+        <!-- Lightbox overlay -->
+        <div class="lightbox-overlay" id="lightbox">
+            <button class="lightbox-close" id="lbClose" type="button">&times;</button>
+            <button class="lightbox-prev" id="lbPrev" type="button">&#9664;</button>
+            <img class="lightbox-img" id="lbImg" src="" alt="">
+            <button class="lightbox-next" id="lbNext" type="button">&#9654;</button>
+            <div class="lightbox-counter" id="lbCounter"></div>
+        </div>
+
+        <button id="metaToggle" type="button">&#128247; Info</button>
+
+        <!-- Data files -->
+        <script src="data/B21_8.js"></script>
+        <script src="data/TungChung_Temples_9.js"></script>
+        <script src="data/1992Interviewsurveydata_7.js"></script>
+        <script src="data/9SEBRoadLine_5.js"></script>
+        <script src="data/9SEBRailLine_4.js"></script>
+        <script src="data/9SEBHydrographyLine_3.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/leaflet.markercluster.js"></script>
+        <script>
+        (function () {
+            "use strict";
+
+            // ---- Field keys ----
+            var KEY = {
+                photoId:   '照片總編號\nPhoto ID',
+                date:      '指攝日期\nPhotograph Date',
+                place:     '位置\nPlace',
+                photoPath: '相片\nPhoto_path',
+                subject1:  'Subject 1',
+                subject2:  'Subject 2',
+                direction: 'Direction',
+                fileType:  '檔案類型\nFile type',
+                source:    'Source',
+                precision: '坐標可信度\ncoordinate_confidence',
+                note:      '坐標備註\ncoordinate_note',
+                cleaning:  'Data cleaning'
+            };
+
+            // ---- Precision display mapping ----
+            var PRECISION_DISPLAY = {
+                'LOW':    'Village-level',
+                'MEDIUM': 'Approximate',
+                'HIGH':   'Approximate'
+            };
+            var PRECISION_EXPLANATION = {
+                'Village-level': '只知道屬於某村落，marker 不代表精確拍攝點',
+                'Approximate':   '位置由舊地圖、照片、筆記或其他線索估算，仍有不確定性'
+            };
+
+            // ---- The 6 records from CSV with unknown coordinates (not in B21_8.js) ----
+            var UNMAPPED_FEATURES = [
+                { properties: {
+                    [KEY.photoId]: 'B21P04', [KEY.date]: '30/4/2004', [KEY.place]: '逸東邨及上嶺皮村屋',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P04.jpg',
+                    [KEY.subject1]: 'Village', [KEY.subject2]: 'Estate', [KEY.direction]: 'South to North',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點：逸東邨(22.2810536,113.935627)及上嶺皮村(22.2789070,113.9368634)。無法指定單一座標。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null },
+                { properties: {
+                    [KEY.photoId]: 'B21P08', [KEY.date]: '30/4/2004', [KEY.place]: '逸東邨及上嶺皮村屋',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P08.jpg',
+                    [KEY.subject1]: 'Fort', [KEY.subject2]: 'Estate', [KEY.direction]: 'South-East to North-West',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點：逸東邨(22.2810536,113.935627)及上嶺皮村(22.2789070,113.9368634)。無法指定單一座標。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null },
+                { properties: {
+                    [KEY.photoId]: 'B21P10', [KEY.date]: '30/4/2004', [KEY.place]: '逸東邨及上嶺皮村屋',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P10.jpg',
+                    [KEY.subject1]: 'Village', [KEY.subject2]: 'Estate', [KEY.direction]: 'South to North',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點：逸東邨(22.2810536,113.935627)及上嶺皮村(22.2789070,113.9368634)。無法指定單一座標。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null },
+                { properties: {
+                    [KEY.photoId]: 'B21P15', [KEY.date]: '30/4/2004', [KEY.place]: '下嶺皮三村聯合公所（下嶺皮，黃家圍，龍井頭）',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P15.jpg',
+                    [KEY.subject1]: 'Village', [KEY.subject2]: null, [KEY.direction]: 'Unknown',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點：三村聯合公所（下嶺皮22.2787512,113.9359310、黃家圍22.2777674,113.9344734、龍井頭22.2757106,113.9337784）。無法指定單一座標。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null },
+                { properties: {
+                    [KEY.photoId]: 'B21P30', [KEY.date]: '30/4/2004', [KEY.place]: '文東路35及37號 靈糧堂秀德小學，靈糧堂怡文中學 藍天海岸，富東商場',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P30.jpg',
+                    [KEY.subject1]: 'Estate', [KEY.subject2]: null, [KEY.direction]: 'North-West to South-East',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點，含多個地址：文東路35及37號靈糧堂秀德小學、靈糧堂怡文中學、藍天海岸、富東商場。無法指定單一座標；有多個不同地點。個別：藍天海岸≈22.2924,113.9490；富東商場≈22.2887,113.9423。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null },
+                { properties: {
+                    [KEY.photoId]: 'B21P33', [KEY.date]: '30/4/2004', [KEY.place]: '東涌地鐵站，東堤灣畔',
+                    [KEY.photoPath]: '/Users/leehoiching/Downloads/ANTH 3223 module 1/B21 photo/B21P33.jpg',
+                    [KEY.subject1]: 'Estate', [KEY.subject2]: null, [KEY.direction]: 'South-West to North-East',
+                    [KEY.fileType]: 'JPG', [KEY.source]: '香港中文大學人類學系',
+                    [KEY.precision]: 'LOW', [KEY.note]: '複合地點：東涌地鐵站(22.2892449,113.9413739)及東堤灣畔(22.2884685,113.939244)。無法指定單一座標。',
+                    [KEY.cleaning]: '位置和坐標備註統一譯為繁體中文'
+                }, geometry: null }
+            ];
+
+            // ---- Merge: B21_8.js (31 mapped) + 6 unmapped ----
+            var mappedFeatures = (typeof json_B21_8 !== 'undefined' && json_B21_8.features) ? json_B21_8.features : [];
+            var allFeatures = mappedFeatures.concat(UNMAPPED_FEATURES);
+
+            // ---- Metadata fields (Notes removed) ----
+            var META_FIELDS = [
+                { label: 'File name',          get: function (f) { return basename(f.properties[KEY.photoPath]); } },
+                { label: 'Place name',         get: function (f) { return f.properties[KEY.place]; } },
+                { label: 'Capture date',       get: function (f) { return f.properties[KEY.date]; } },
+                { label: 'Photo subject',      get: function (f) {
+                    var a = f.properties[KEY.subject1], b = f.properties[KEY.subject2], p = [];
+                    if (a) p.push(a); if (b) p.push(b);
+                    return p.join('; ');
+                } },
+                { label: 'Direction',          get: function (f) { return f.properties[KEY.direction]; } },
+                { label: 'Location precision', get: function (f) { return f.properties[KEY.precision]; } },
+                { label: 'Location source',    get: function (f) { return f.properties[KEY.source]; } },
+                { label: 'Location note',      get: function (f) { return f.properties[KEY.note]; } }
+            ];
+
+            // ---- Filter groups (ORDER: Place -> Subject -> Location precision) ----
+            var FILTER_GROUPS = [
+                { label: 'place_name',         key: KEY.place,         type: 'value' },
+                { label: 'photo_subject',      key: KEY.subject1,      type: 'value' },
+                { label: 'location_precision', key: KEY.precision,     type: 'precision' }
+            ];
+
+            function basename(p) { if (!p) return ''; var s = String(p), i = s.lastIndexOf('/'); return i >= 0 ? s.substring(i + 1) : s; }
+            function photoImgSrc(p) {
+                if (!p) return '';
+                return 'images/' + String(p).replace(/[\\/:]/g, '_').trim().replace(/ /g, '%20');
+            }
+            function val(f, k) { var v = f.properties[k]; return (v === null || v === undefined) ? '' : String(v); }
+            function escapeHtml(s) { if (s === null || s === undefined) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+            function isMapped(f) { return !!(f.geometry && f.geometry.coordinates); }
+
+            // ================================================================
+            // MAP SETUP
+            // ================================================================
+            var map = L.map('map', { zoomControl: true, maxZoom: 28, minZoom: 1 })
+                .fitBounds([[22.2611433083821, 113.92801537272908], [22.304176752249152, 113.99037521354242]]);
+
+            var rasterDefs = [
+                { name: '1982 Aerial',       img: 'data/1982Aerial_1.png',                bounds: [[22.273668309625048, 113.93408318735082], [22.300810318902073, 113.9705152222537]], on: true },
+                { name: '2026 Topographic Map',   img: 'data/TopographicMap_0.png',             bounds: [[22.273666401328807, 113.93408524462212], [22.300808410150857, 113.9705172786357]], on: false },
+                { name: '2020 Draft Zoning Plan', img: 'data/DraftTungChungTownCentreAreaOutlineZoningPlanNoSITCTC23_2.png', bounds: [[22.26746028321098, 113.93078507760002], [22.296511596059876, 113.96733502477193]], on: false },
+                { name: '1992 Interview Map',img: 'data/1992interviewmap_6.png',           bounds: [[22.27548590028527, 113.93320383963692], [22.279678617389546, 113.93923168681332]], on: false }
+            ];
+            var overlayMaps = {};
+            rasterDefs.forEach(function (d) {
+                var layer = L.imageOverlay(d.img, d.bounds, { interactive: false });
+                overlayMaps[d.name] = layer;
+                if (d.on) layer.addTo(map);
+            });
+
+            function styleLine(color) {
+                return function () { return { opacity: 1, color: color, dashArray: '', lineCap: 'round', lineJoin: 'round', weight: 1.0, fillOpacity: 0, interactive: true }; };
+            }
+            var geoLineLayers = {};
+            if (typeof json_9SEBHydrographyLine_3 !== 'undefined') {
+                geoLineLayers['Hydrography'] = L.geoJson(json_9SEBHydrographyLine_3, { style: styleLine('rgba(0,59,255,1.0)'), interactive: true });
+            }
+            if (typeof json_9SEBRailLine_4 !== 'undefined') {
+                geoLineLayers['Rail'] = L.geoJson(json_9SEBRailLine_4, { style: styleLine('rgba(89,62,0,1.0)'), interactive: true });
+            }
+            if (typeof json_9SEBRoadLine_5 !== 'undefined') {
+                geoLineLayers['Road'] = L.geoJson(json_9SEBRoadLine_5, { style: styleLine('rgba(255,101,0,1.0)'), interactive: true });
+            }
+            for (var glName in geoLineLayers) {
+                overlayMaps['2026 Geodatabase — ' + glName] = geoLineLayers[glName];
+            }
+
+            if (typeof json_1992Interviewsurveydata_7 !== 'undefined') {
+                var layerSurvey = L.geoJson(json_1992Interviewsurveydata_7, {
+                    style: function (feature) {
+                        var c = String(feature.properties['Interview'] || '');
+                        var fill = c === 'Y' ? 'rgba(216,34,85,1.0)' : (c === 'N' ? 'rgba(0,44,255,1.0)' : 'rgba(255,235,0,1.0)');
+                        return { color: 'rgba(35,35,35,1.0)', weight: 1, fill: true, fillOpacity: 1, fillColor: fill, interactive: true };
+                    }, interactive: true
+                });
+                overlayMaps['1992 Interview survey data'] = layerSurvey;
+            }
+
+            // Tin Hau Temple (not in cluster) — click opens in right panel
+            if (typeof json_TungChung_Temples_9 !== 'undefined' && json_TungChung_Temples_9.features) {
+                var templeLayer = L.geoJson(json_TungChung_Temples_9, {
+                    pointToLayer: function (feature, latlng) {
+                        var m = L.marker(latlng, {
+                            icon: L.icon({ iconUrl: 'markers/temple_icon.svg', iconSize: [36, 36], iconAnchor: [18, 18] })
+                        });
+                        m.on('click', function () {
+                            // Deselect any B21 photo marker first
+                            if (selectedIndex >= 0 && markersById[selectedIndex]) {
+                                var oldF = allFeatures[selectedIndex];
+                                var oldPrec = oldF.properties[KEY.precision] || 'MEDIUM';
+                                var oldSubj = oldF.properties[KEY.subject1] || 'Village';
+                                markersById[selectedIndex].setStyle(getMarkerStyle(oldSubj, oldPrec));
+                            }
+                            selectedIndex = -1;
+
+                            var p = feature.properties || {};
+                            var timg = p['Photo path'] ? photoImgSrc(p['Photo path']) : '';
+                            var html = '<h2>' + escapeHtml(p.Name || 'Tin Hau Temple') + '</h2>';
+                            html += '<div class="photo-wrap" id="photoWrap">';
+                            if (timg) {
+                                html += '<img id="photoImg" src="' + timg + '" alt="' + escapeHtml(p.Name || '') + '">';
+                            } else {
+                                html += '<div class="imgfail">No photo available</div>';
+                            }
+                            html += '</div>';
+                            html += '<dl>';
+                            html += '<div class="row"><dt>Name</dt><dd>' + escapeHtml(p.Name || '—') + '</dd></div>';
+                            html += '<div class="row"><dt>Grade</dt><dd>' + escapeHtml(p.Grade !== undefined && p.Grade !== null ? String(p.Grade) : '—') + '</dd></div>';
+                            html += '<div class="row"><dt>Source</dt><dd>' + escapeHtml(p.Source || '—') + '</dd></div>';
+                            html += '</dl>';
+                            metaContent.innerHTML = html;
+
+                            if (timg) {
+                                var im = document.getElementById('photoImg');
+                                if (im) {
+                                    im.addEventListener('error', function () {
+                                        var w = document.getElementById('photoWrap');
+                                        if (w) w.innerHTML = '<div class="imgfail">Photo image not found</div>';
+                                    });
+                                }
+                            }
+
+                            // On tablet/mobile, ensure meta panel is open
+                            if (window.innerWidth <= 1100) {
+                                document.getElementById('meta').classList.add('meta-open');
+                            }
+                        });
+                        return m;
+                    }, interactive: true
+                });
+                templeLayer.addTo(map);
+                overlayMaps['Tin Hau Temple'] = templeLayer;
+            }
+
+            // ---- Layer order & opacity helpers (must be before control class) ----
+            // Default order (top → bottom): matches user's preferred stacking
+            var DEFAULT_ORDER = [
+                '1992 Interview survey data',
+                '1992 Interview Map',
+                '2026 Geodatabase — Hydrography',
+                '2026 Geodatabase — Rail',
+                '2026 Geodatabase — Road',
+                'Tin Hau Temple',
+                '2020 Draft Zoning Plan',
+                '1982 Aerial',
+                '2026 Topographic Map'
+            ];
+            var layerOrder = [];
+            DEFAULT_ORDER.forEach(function (name) {
+                var layer = overlayMaps[name];
+                if (layer) {
+                    layerOrder.push({ name: name, layer: layer, visible: map.hasLayer(layer), opacity: 1 });
+                }
+            });
+
+            function setLayerOpacity(entry) {
+                var layer = entry.layer, op = entry.opacity;
+                if (layer.setOpacity) { layer.setOpacity(op); }
+                else if (layer.setStyle) {
+                    layer.setStyle({ opacity: op, fillOpacity: op });
+                }
+            }
+
+            function applyLayerState() {
+                layerOrder.forEach(function (entry) {
+                    if (map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
+                });
+                for (var i = layerOrder.length - 1; i >= 0; i--) {
+                    var entry = layerOrder[i];
+                    if (entry.visible) {
+                        map.addLayer(entry.layer);
+                        setLayerOpacity(entry);
+                    }
+                }
+            }
+
+            var CustomLayerControl = L.Control.extend({
+                options: { position: 'topright' },
+                onAdd: function (map) {
+                    var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control layer-panel');
+                    L.DomEvent.disableClickPropagation(container);
+                    L.DomEvent.disableScrollPropagation(container);
+
+                    var header = L.DomUtil.create('div', 'layer-panel-header', container);
+                    header.innerHTML = '<span>Layers</span>';
+                    var collapseBtn = document.createElement('button');
+                    collapseBtn.className = 'layer-collapse-btn';
+                    collapseBtn.innerHTML = '&#9660;';
+                    collapseBtn.title = 'Collapse layers panel';
+                    collapseBtn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        container.classList.toggle('collapsed');
+                        collapseBtn.innerHTML = container.classList.contains('collapsed') ? '&#9654;' : '&#9660;';
+                        collapseBtn.title = container.classList.contains('collapsed') ? 'Expand layers panel' : 'Collapse layers panel';
+                    });
+                    header.appendChild(collapseBtn);
+                    header.addEventListener('click', function (e) {
+                        if (e.target === header || e.target.tagName === 'SPAN') {
+                            if (container.classList.contains('collapsed')) {
+                                container.classList.remove('collapsed');
+                                collapseBtn.innerHTML = '&#9660;';
+                                collapseBtn.title = 'Collapse layers panel';
+                            }
+                        }
+                    });
+
+                    var body = L.DomUtil.create('div', 'layer-panel-body', container);
+                    var footer = L.DomUtil.create('div', 'layer-panel-footer', container);
+                    footer.textContent = 'Top layers draw above bottom layers';
+
+                    var dragSrcEl = null, dragSrcIndex = null;
+                    var self = this;
+
+                    function render() {
+                        body.innerHTML = '';
+                        layerOrder.forEach(function (entry, idx) {
+                            var item = document.createElement('div');
+                            item.className = 'layer-item';
+                            item.draggable = true;
+                            item.dataset.index = idx;
+
+                            var grip = document.createElement('span');
+                            grip.className = 'layer-drag-handle';
+                            grip.innerHTML = '&#9776;';
+                            item.appendChild(grip);
+
+                            var visWrap = document.createElement('span');
+                            visWrap.className = 'layer-visibility';
+                            var cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.checked = entry.visible;
+                            cb.addEventListener('change', function () {
+                                entry.visible = cb.checked;
+                                applyLayerState();
+                            });
+                            visWrap.appendChild(cb);
+                            item.appendChild(visWrap);
+
+                            var name = document.createElement('span');
+                            name.className = 'layer-name';
+                            name.textContent = entry.name;
+                            name.title = entry.name;
+                            item.appendChild(name);
+
+                            var opWrap = document.createElement('span');
+                            opWrap.className = 'layer-opacity-wrap';
+                            var slider = document.createElement('input');
+                            slider.type = 'range';
+                            slider.min = 0; slider.max = 100; slider.value = Math.round(entry.opacity * 100);
+                            var opVal = document.createElement('span');
+                            opVal.className = 'layer-opacity-val';
+                            opVal.textContent = Math.round(entry.opacity * 100) + '%';
+                            slider.addEventListener('input', function () {
+                                entry.opacity = parseInt(slider.value, 10) / 100;
+                                opVal.textContent = slider.value + '%';
+                                setLayerOpacity(entry);
+                            });
+                            opWrap.appendChild(slider);
+                            opWrap.appendChild(opVal);
+                            item.appendChild(opWrap);
+
+                            item.addEventListener('dragstart', function (e) {
+                                dragSrcEl = item;
+                                dragSrcIndex = idx;
+                                item.classList.add('dragging');
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', String(idx));
+                            });
+                            item.addEventListener('dragend', function () {
+                                item.classList.remove('dragging');
+                                dragSrcEl = null; dragSrcIndex = null;
+                                Array.from(body.querySelectorAll('.layer-item')).forEach(function (el) { el.classList.remove('drag-over'); });
+                            });
+                            item.addEventListener('dragover', function (e) {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragSrcEl !== item) item.classList.add('drag-over');
+                            });
+                            item.addEventListener('dragleave', function () { item.classList.remove('drag-over'); });
+                            item.addEventListener('drop', function (e) {
+                                e.preventDefault();
+                                item.classList.remove('drag-over');
+                                if (dragSrcIndex === null) return;
+                                var targetIndex = parseInt(item.dataset.index, 10);
+                                if (dragSrcIndex === targetIndex) return;
+                                var moved = layerOrder.splice(dragSrcIndex, 1)[0];
+                                layerOrder.splice(targetIndex, 0, moved);
+                                applyLayerState();
+                                render();
+                            });
+
+                            body.appendChild(item);
+                        });
+                    }
+
+                    render();
+                    this._render = render;
+                    return container;
+                },
+                refresh: function () { if (this._render) this._render(); }
+            });
+
+            var layerControl = new CustomLayerControl().addTo(map);
+            applyLayerState();
+
+            // ================================================================
+            // B21 PHOTO MARKERS — styled by Subject 1 (color) + precision (border)
+            // ================================================================
+            var SUBJECT_COLORS = {
+                'Village': { fill: '#e74c3c', stroke: '#c0392b' },
+                'Fort':    { fill: '#8e44ad', stroke: '#6c3483' },
+                'Estate':  { fill: '#2980b9', stroke: '#1a5276' },
+                'Aerial':  { fill: '#27ae60', stroke: '#1e8449' },
+                'Shrine':  { fill: '#f39c12', stroke: '#d68910' },
+                'Park':    { fill: '#16a085', stroke: '#117a65' }
+            };
+            function getMarkerStyle(subject, precision) {
+                var c = SUBJECT_COLORS[subject] || SUBJECT_COLORS['Village'];
+                var isLow = (precision === 'LOW');
+                return {
+                    radius: isLow ? 8 : 7,
+                    color: c.stroke,
+                    weight: isLow ? 2 : 1.5,
+                    fillColor: c.fill,
+                    fillOpacity: isLow ? 0.75 : 1.0,
+                    dashArray: isLow ? '4,3' : ''
+                };
+            }
+            var STYLE_SELECTED = { radius: 14, color: '#7a1f00', weight: 3.5, fillColor: '#ff7a18', fillOpacity: 1, dashArray: '' };
+
+            var cluster = new L.MarkerClusterGroup({ showCoverageOnHover: false, spiderfyDistanceMultiplier: 2, maxClusterRadius: 50 });
+            var markersById = {};      // index -> marker (only for mapped features)
+            var selectedIndex = -1;
+
+            allFeatures.forEach(function (f, i) {
+                if (!isMapped(f)) return; // skip unmapped
+                var c = f.geometry.coordinates;
+                var latlng = L.latLng(c[1], c[0]);
+                var prec = val(f, KEY.precision) || 'MEDIUM';
+                var subj = val(f, KEY.subject1) || 'Village';
+                var style = getMarkerStyle(subj, prec);
+                var m = L.circleMarker(latlng, style);
+                m._idx = i;
+                m._prec = prec;
+                m._subj = subj;
+                m.on('click', function () { selectFeature(i); });
+                markersById[i] = m;
+                cluster.addLayer(m);
+            });
+            cluster.addTo(map);
+
+            // ================================================================
+            // FILTERS
+            // ================================================================
+            var filterState = {};
+            var groupEls = [];
+
+            function buildFilters() {
+                var container = document.getElementById('filterGroups');
+                container.innerHTML = '';
+                FILTER_GROUPS.forEach(function (g, gi) {
+                    var counts = {};
+                    allFeatures.forEach(function (f) {
+                        var v = val(f, g.key);
+                        if (v === '') return;
+                        if (g.type === 'precision') { v = PRECISION_DISPLAY[v] || v; }
+                        counts[v] = (counts[v] || 0) + 1;
+                    });
+                    var values = Object.keys(counts).sort(function (a, b) {
+                        var na = isNaN(parseFloat(a)), nb = isNaN(parseFloat(b));
+                        if (na && !nb) return 1; if (!na && nb) return -1;
+                        return a < b ? -1 : (a > b ? 1 : 0);
+                    });
+
+                    filterState[gi] = {};
+                    values.forEach(function (v) { filterState[gi][v] = false; });
+
+                    var group = document.createElement('div');
+                    group.className = 'filter-group';
+
+                    var head = document.createElement('div');
+                    head.className = 'fg-head';
+                    head.innerHTML = '<span>' + escapeHtml(g.label) + '</span><span class="arrow">&#9660;</span>';
+                    head.addEventListener('click', function () { group.classList.toggle('collapsed'); });
+
+                    var body = document.createElement('div');
+                    body.className = 'fg-body';
+
+                    values.forEach(function (v) {
+                        var lbl = document.createElement('label');
+                        lbl.className = 'opt';
+                        var cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = v;
+                        cb.addEventListener('change', function () {
+                            filterState[gi][v] = cb.checked;
+                            applyFilters();
+                        });
+                        var txt = document.createElement('span');
+                        txt.textContent = v;
+                        var cnt = document.createElement('span');
+                        cnt.className = 'cnt';
+                        cnt.textContent = counts[v];
+                        lbl.appendChild(cb);
+                        lbl.appendChild(txt);
+                        lbl.appendChild(cnt);
+                        body.appendChild(lbl);
+                    });
+
+                    if (g.type === 'precision') {
+                        // note & legend moved to standalone #markerLegend block
+                    }
+
+                    group.appendChild(head);
+                    group.appendChild(body);
+                    container.appendChild(group);
+                    groupEls.push({ group: group, gi: gi, inputs: Array.prototype.slice.call(body.querySelectorAll('input[type=checkbox]')) });
+                });
+            }
+
+            function getSelections() {
+                return FILTER_GROUPS.map(function (g, gi) {
+                    var sel = [];
+                    var st = filterState[gi];
+                    for (var v in st) { if (st[v]) sel.push(v); }
+                    return sel;
+                });
+            }
+
+            function matches(f, sels) {
+                for (var gi = 0; gi < FILTER_GROUPS.length; gi++) {
+                    var sel = sels[gi];
+                    if (!sel || sel.length === 0) continue;
+                    var rawVal = val(f, FILTER_GROUPS[gi].key);
+                    if (FILTER_GROUPS[gi].type === 'precision') { rawVal = PRECISION_DISPLAY[rawVal] || rawVal; }
+                    if (sel.indexOf(rawVal) === -1) return false;
+                }
+                return true;
+            }
+
+            function applyFilters() {
+                var sels = getSelections();
+                // Update map markers
+                cluster.clearLayers();
+                var shownOnMap = 0;
+                allFeatures.forEach(function (f, i) {
+                    if (matches(f, sels) && isMapped(f)) {
+                        cluster.addLayer(markersById[i]);
+                        shownOnMap++;
+                    }
+                });
+                if (selectedIndex >= 0 && !matches(allFeatures[selectedIndex], sels)) {
+                    deselect();
+                }
+                // Update unmapped list
+                buildUnmappedList(sels);
+                // Update counts
+                var shownTotal = 0;
+                allFeatures.forEach(function (f) { if (matches(f, sels)) shownTotal++; });
+                document.getElementById('shownCount').textContent = shownTotal;
+                document.getElementById('subCount').textContent = shownOnMap + ' on map + ' + (shownTotal - shownOnMap) + ' without coordinates';
+            }
+
+            function buildUnmappedList(sels) {
+                var list = document.getElementById('unmappedList');
+                list.innerHTML = '';
+                var hasAny = false;
+                allFeatures.forEach(function (f, i) {
+                    if (!isMapped(f) && matches(f, sels)) {
+                        hasAny = true;
+                        var item = document.createElement('div');
+                        item.className = 'unmapped-item';
+                        item.innerHTML = '<span class="badge">' + escapeHtml(f.properties[KEY.photoId]) + '</span>' +
+                            '<span>' + escapeHtml(f.properties[KEY.place] || '') + '</span>';
+                        item.addEventListener('click', function () { selectFeature(i); });
+                        list.appendChild(item);
+                    }
+                });
+                document.getElementById('unmappedSection').style.display = hasAny ? 'block' : 'none';
+            }
+
+            document.getElementById('btnSelectAll').addEventListener('click', function () {
+                groupEls.forEach(function (ge) {
+                    ge.inputs.forEach(function (cb) { cb.checked = true; filterState[ge.gi][cb.value] = true; });
+                });
+                hideUncertainMsg();
+                applyFilters();
+            });
+            document.getElementById('btnClear').addEventListener('click', function () {
+                groupEls.forEach(function (ge) {
+                    ge.inputs.forEach(function (cb) { cb.checked = false; filterState[ge.gi][cb.value] = false; });
+                });
+                hideUncertainMsg();
+                applyFilters();
+            });
+
+            function hideUncertainMsg() {
+                document.getElementById('uncertainMsg').classList.remove('visible');
+            }
+
+            document.getElementById('btnUncertain').addEventListener('click', function () {
+                // "Uncertain" = the 6 Village-level (LOW) photos without coordinates
+                groupEls.forEach(function (ge) {
+                    ge.inputs.forEach(function (cb) {
+                        var gType = FILTER_GROUPS[ge.gi].type;
+                        var isVillage = (cb.value === 'Village-level');
+                        cb.checked = (gType === 'precision' && isVillage);
+                        filterState[ge.gi][cb.value] = (gType === 'precision' && isVillage);
+                    });
+                });
+                applyFilters();
+                var msg = document.getElementById('uncertainMsg');
+                msg.textContent = 'Showing 6 Village-level records whose coordinates are unknown. These photographs can only be located to the general village area, not to a precise point.';
+                msg.classList.add('visible');
+            });
+            document.getElementById('btnReset').addEventListener('click', function () {
+                groupEls.forEach(function (ge) {
+                    ge.inputs.forEach(function (cb) { cb.checked = false; filterState[ge.gi][cb.value] = false; });
+                });
+                hideUncertainMsg();
+                applyFilters();
+            });
+
+            // ================================================================
+            // SELECTION / METADATA PANEL
+            // ================================================================
+            var metaContent = document.getElementById('metaContent');
+            var metaEl = document.getElementById('meta');
+
+            function deselect() {
+                if (selectedIndex >= 0 && markersById[selectedIndex]) {
+                    var f = allFeatures[selectedIndex];
+                    var prec = f.properties[KEY.precision] || 'MEDIUM';
+                    var subj = f.properties[KEY.subject1] || 'Village';
+                    markersById[selectedIndex].setStyle(getMarkerStyle(subj, prec));
+                }
+                selectedIndex = -1;
+                metaContent.innerHTML = '<p class="placeholder">Click a photo marker on the map to view the photograph and its metadata.</p>';
+            }
+
+            // ---- Build coordinate-to-photos index for gallery (same cluster) ----
+            function coordKey(c) {
+                if (!c || c.length < 2) return 'unknown';
+                return c[0].toFixed(6) + ',' + c[1].toFixed(6);
+            }
+            var coordPhotos = {};
+            allFeatures.forEach(function (f, idx) {
+                if (!isMapped(f)) return;
+                var k = coordKey(f.geometry.coordinates);
+                if (!coordPhotos[k]) coordPhotos[k] = [];
+                coordPhotos[k].push({ index: idx, feature: f });
+            });
+
+            var galleryState = { key: null, photos: [], current: 0 };
+
+            function renderGallery() {
+                var gp = galleryState.photos;
+                var ci = galleryState.current;
+                var cf = gp[ci];
+                if (!cf) return;
+                var f = cf.feature;
+                var mapped = isMapped(f);
+                var fname = basename(f.properties[KEY.photoPath]);
+                var src = photoImgSrc(f.properties[KEY.photoPath]);
+
+                var html = '<h2>Photograph ' + escapeHtml(fname) + '</h2>';
+
+                if (!mapped) {
+                    html += '<div class="no-coords-banner">No precise coordinates available for this photograph. It is classified as Village-level because only the general village area is known.</div>';
+                }
+
+                // Main photo with counter
+                html += '<div class="gallery-main" id="galleryMain">';
+                if (gp.length > 1) {
+                    html += '<span class="gallery-counter">' + (ci + 1) + ' / ' + gp.length + '</span>';
+                }
+                if (src) {
+                    html += '<img id="photoImg" src="' + src + '" alt="' + escapeHtml(fname) + '">';
+                } else {
+                    html += '<div class="imgfail">No photo path</div>';
+                }
+                html += '</div>';
+
+                // Navigation + thumbnails
+                if (gp.length > 1) {
+                    html += '<div class="gallery-nav">';
+                    html += '<button id="gPrev" type="button"' + (ci <= 0 ? ' disabled' : '') + '>&#9664; Prev</button>';
+                    html += '<button id="gNext" type="button"' + (ci >= gp.length - 1 ? ' disabled' : '') + '>Next &#9654;</button>';
+                    html += '<span class="g-info">' + escapeHtml(f.properties[KEY.place] || '') + ' — ' + gp.length + ' photos</span>';
+                    html += '</div>';
+                    html += '<div class="gallery-thumbs" id="gThumbs">';
+                    gp.forEach(function (p, idx) {
+                        var thumbSrc = photoImgSrc(p.feature.properties[KEY.photoPath]);
+                        var activeClass = idx === ci ? ' active' : '';
+                        html += '<div class="gallery-thumb' + activeClass + '" data-gi="' + idx + '">' +
+                            (thumbSrc ? '<img src="' + thumbSrc + '" alt="">' : '') + '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                html += '<dl>';
+                META_FIELDS.forEach(function (mf) {
+                    var raw = mf.get(f);
+                    html += '<div class="row"><dt>' + escapeHtml(mf.label) + '</dt>';
+                    if (raw && raw !== '') {
+                        html += '<dd>' + escapeHtml(raw) + '</dd>';
+                    } else {
+                        html += '<dd class="null">—</dd>';
+                    }
+                    html += '</div>';
+                });
+                html += '</dl>';
+
+                metaContent.innerHTML = html;
+
+                // Attach thumbnail clicks
+                var thumbs = document.querySelectorAll('.gallery-thumb');
+                thumbs.forEach(function (t) {
+                    t.addEventListener('click', function () {
+                        var gi = parseInt(t.dataset.gi, 10);
+                        galleryState.current = gi;
+                        selectedIndex = gp[gi].index;
+                        renderGallery();
+                        updateMarkerHighlight();
+                    });
+                });
+
+                // Attach prev/next
+                var prevBtn = document.getElementById('gPrev');
+                var nextBtn = document.getElementById('gNext');
+                if (prevBtn) {
+                    prevBtn.addEventListener('click', function () {
+                        if (ci > 0) { galleryState.current = ci - 1; selectedIndex = gp[ci - 1].index; renderGallery(); updateMarkerHighlight(); }
+                    });
+                }
+                if (nextBtn) {
+                    nextBtn.addEventListener('click', function () {
+                        if (ci < gp.length - 1) { galleryState.current = ci + 1; selectedIndex = gp[ci + 1].index; renderGallery(); updateMarkerHighlight(); }
+                    });
+                }
+
+                // Attach lightbox open
+                var main = document.getElementById('galleryMain');
+                if (main) {
+                    main.addEventListener('click', function () { openLightbox(ci); });
+                }
+
+                // Image error handler
+                if (src) {
+                    var im = document.getElementById('photoImg');
+                    if (im) {
+                        im.addEventListener('error', function () {
+                            var w = document.getElementById('galleryMain');
+                            if (w) w.innerHTML = '<div class="imgfail">Photo image not found</div>';
+                        });
+                    }
+                }
+            }
+
+            function updateMarkerHighlight() {
+                // Reset all markers
+                Object.keys(markersById).forEach(function (k) {
+                    var mf = allFeatures[k];
+                    var p = mf.properties[KEY.precision] || 'MEDIUM';
+                    var s = mf.properties[KEY.subject1] || 'Village';
+                    markersById[k].setStyle(getMarkerStyle(s, p));
+                });
+                // Highlight current
+                if (selectedIndex >= 0 && markersById[selectedIndex]) {
+                    markersById[selectedIndex].setStyle(STYLE_SELECTED);
+                    markersById[selectedIndex].bringToFront();
+                }
+            }
+
+            function selectFeature(i) {
+                if (selectedIndex >= 0 && markersById[selectedIndex]) {
+                    var oldF = allFeatures[selectedIndex];
+                    var oldPrec = oldF.properties[KEY.precision] || 'MEDIUM';
+                    var oldSubj = oldF.properties[KEY.subject1] || 'Village';
+                    markersById[selectedIndex].setStyle(getMarkerStyle(oldSubj, oldPrec));
+                }
+                selectedIndex = i;
+                var f = allFeatures[i];
+                var mapped = isMapped(f);
+
+                if (mapped && markersById[i]) {
+                    markersById[i].setStyle(STYLE_SELECTED);
+                    markersById[i].bringToFront();
+                }
+
+                var c = f.geometry.coordinates;
+                var k = isMapped(f) ? coordKey(c) : 'unknown';
+                var group = coordPhotos[k] || [{ index: i, feature: f }];
+                var currentInGroup = 0;
+                group.forEach(function (p, idx) { if (p.index === i) currentInGroup = idx; });
+
+                galleryState = { key: k, photos: group, current: currentInGroup };
+                renderGallery();
+
+                if (mapped) {
+                    var c = f.geometry.coordinates;
+                    map.setView(L.latLng(c[1], c[0]), Math.max(map.getZoom(), 15), { animate: true });
+                }
+
+                if (window.matchMedia('(max-width: 1100px)').matches) {
+                    metaEl.classList.add('meta-open');
+                }
+            }
+
+            // ================================================================
+            // LIGHTBOX
+            // ================================================================
+            var lb = document.getElementById('lightbox');
+            var lbImg = document.getElementById('lbImg');
+            var lbCounter = document.getElementById('lbCounter');
+            var lbOpen = false;
+
+            function openLightbox(idx) {
+                if (!galleryState.photos.length) return;
+                var i = (idx !== undefined) ? idx : galleryState.current;
+                lbOpen = true;
+                updateLightbox(i);
+                lb.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeLightbox() {
+                lbOpen = false;
+                lb.classList.remove('open');
+                document.body.style.overflow = '';
+            }
+            function updateLightbox(i) {
+                var gp = galleryState.photos;
+                if (i < 0) i = gp.length - 1;
+                if (i >= gp.length) i = 0;
+                galleryState.current = i;
+                selectedIndex = gp[i].index;
+                var f = gp[i].feature;
+                var src = photoImgSrc(f.properties[KEY.photoPath]);
+                lbImg.src = src || '';
+                lbCounter.textContent = (i + 1) + ' / ' + gp.length;
+                updateMarkerHighlight();
+            }
+
+            document.getElementById('lbClose').addEventListener('click', closeLightbox);
+            document.getElementById('lbPrev').addEventListener('click', function (e) { e.stopPropagation(); updateLightbox(galleryState.current - 1); });
+            document.getElementById('lbNext').addEventListener('click', function (e) { e.stopPropagation(); updateLightbox(galleryState.current + 1); });
+            lb.addEventListener('click', function (e) { if (e.target === lb) closeLightbox(); });
+
+            // Keyboard navigation
+            document.addEventListener('keydown', function (e) {
+                if (!lbOpen) return;
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') updateLightbox(galleryState.current - 1);
+                if (e.key === 'ArrowRight') updateLightbox(galleryState.current + 1);
+            });
+
+            // Swipe support for lightbox
+            (function () {
+                var startX = 0;
+                lb.addEventListener('touchstart', function (e) { startX = e.changedTouches[0].screenX; }, { passive: true });
+                lb.addEventListener('touchend', function (e) {
+                    var endX = e.changedTouches[0].screenX;
+                    var diff = startX - endX;
+                    if (Math.abs(diff) > 50) {
+                        if (diff > 0) updateLightbox(galleryState.current + 1);
+                        else updateLightbox(galleryState.current - 1);
+                    }
+                }, { passive: true });
+            })();
+
+            // ================================================================
+            // MOBILE BOTTOM SHEET
+            // ================================================================
+            (function () {
+                var sheet = document.getElementById('filters');
+                var handle = document.getElementById('sheetHandle');
+                var closeBtn = document.getElementById('sheetClose');
+                if (!handle) return;
+
+                handle.addEventListener('click', function () {
+                    sheet.classList.toggle('sheet-open');
+                });
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', function () {
+                        sheet.classList.remove('sheet-open');
+                    });
+                }
+
+                // Touch drag
+                var startY = 0, startTransform = 0;
+                handle.addEventListener('touchstart', function (e) {
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+                handle.addEventListener('touchmove', function (e) {
+                    var dy = e.touches[0].clientY - startY;
+                    if (sheet.classList.contains('sheet-open') && dy > 0) {
+                        sheet.style.transform = 'translateY(' + dy + 'px)';
+                    } else if (!sheet.classList.contains('sheet-open') && dy < 0) {
+                        sheet.style.transform = 'translateY(calc(100% - 44px + ' + Math.abs(dy) + 'px))';
+                    }
+                }, { passive: true });
+                handle.addEventListener('touchend', function (e) {
+                    var dy = e.changedTouches[0].clientY - startY;
+                    sheet.style.transform = '';
+                    if (Math.abs(dy) > 60) {
+                        if (dy > 0) sheet.classList.remove('sheet-open');
+                        else sheet.classList.add('sheet-open');
+                    }
+                }, { passive: true });
+            })();
+
+            document.getElementById('metaClose').addEventListener('click', function () { metaEl.classList.remove('meta-open'); });
+            document.getElementById('metaToggle').addEventListener('click', function () { metaEl.classList.toggle('meta-open'); });
+
+            // Desktop meta panel collapse / expand
+            var appEl = document.getElementById('app');
+            document.getElementById('metaCollapse').addEventListener('click', function () {
+                appEl.classList.add('meta-collapsed');
+                setTimeout(function () { map.invalidateSize(); }, 260);
+            });
+            document.getElementById('metaExpand').addEventListener('click', function () {
+                appEl.classList.remove('meta-collapsed');
+                setTimeout(function () { map.invalidateSize(); }, 260);
+            });
+
+            // Desktop filters panel collapse / expand
+            document.getElementById('filterCollapse').addEventListener('click', function () {
+                appEl.classList.add('filter-collapsed');
+                setTimeout(function () { map.invalidateSize(); }, 260);
+            });
+            document.getElementById('filterExpand').addEventListener('click', function () {
+                appEl.classList.remove('filter-collapsed');
+                setTimeout(function () { map.invalidateSize(); }, 260);
+            });
+
+            // ================================================================
+            // INIT
+            // ================================================================
+            var mappedCount = mappedFeatures.length;
+            var unmappedCount = UNMAPPED_FEATURES.length;
+            document.getElementById('totalCount').textContent = allFeatures.length;
+            document.getElementById('subCount').textContent = mappedCount + ' on map + ' + unmappedCount + ' without coordinates';
+            buildFilters();
+            buildUnmappedList(getSelections());
+            applyFilters();
+
+            // Fill static marker colour legend
+            (function () {
+                var el = document.getElementById('markerLegend');
+                if (!el) return;
+                var html = '<div class="marker-legend-title">Marker colours by subject</div>';
+                Object.keys(SUBJECT_COLORS).forEach(function (subj) {
+                    var c = SUBJECT_COLORS[subj];
+                    html += '<div class="legend-item"><span class="legend-swatch" style="background:' + c.fill + ';border:1.5px solid ' + c.stroke + ';"></span>' + escapeHtml(subj) + '</div>';
+                });
+                html += '<div style="margin-top:8px;font-size:11px;color:var(--muted);">Dashed border = Village-level &nbsp;|&nbsp; Solid border = Approximate</div>';
+                html += '<div style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.4;">' +
+                    '<strong>Colour = Subject (Subject 1)</strong>: different types of photographed subjects use different colours.<br>' +
+                    '<strong>Border = Coordinate precision</strong>: dashed = Village-level; solid = Approximate.' +
+                    '</div>';
+                el.innerHTML = html;
+            })();
+
+            // Fill static 1992 Interview survey data legend
+            (function () {
+                var el = document.getElementById('surveyLegend');
+                if (!el) return;
+                el.innerHTML =
+                    '<div class="survey-legend-title">1992 Interview survey data</div>' +
+                    '<div class="legend-item"><span class="legend-swatch" style="background:rgba(0,44,255,0.55);border:1.5px solid rgba(0,44,255,1);"></span>Not interviewed</div>' +
+                    '<div class="legend-item"><span class="legend-swatch" style="background:rgba(216,34,85,0.55);border:1.5px solid rgba(216,34,85,1);"></span>Interviewed</div>';
+            })();
+            setTimeout(function () { map.invalidateSize(); }, 200);
+            window.addEventListener('resize', function () { map.invalidateSize(); });
+
+            window.tcMap = map;
+            window.tcSelectFeature = selectFeature;
+            window.tcApplyFilters = applyFilters;
+            window.tcFeatures = allFeatures;
+        })();
+        </script>
+    </body>
+</html>
